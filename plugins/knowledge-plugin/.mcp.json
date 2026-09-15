@@ -3,6 +3,13 @@
     "codegraph": {
       "command": "npx",
       "args": ["-y", "@colbymchenry/codegraph", "serve", "--mcp"]
+    },
+    "gitcode": {
+      "command": "npx",
+      "args": ["-y", "@yangxt65535/gitcode-mcp"],
+      "env": {
+        "GITCODE_TOKEN": "${GITCODE_TOKEN}"
+      }
     }
   }
 }
