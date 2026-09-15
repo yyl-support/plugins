@@ -29,10 +29,24 @@ PORTAL_DOCS = ["CLAUDE.md", "AGENTS.md", "README.md"]
 IGNORE_ENTRIES = {".git", ".github", ".claude", ".gitignore"}
 
 # 文件扩展名白名单——用于把 token 判为"文件引用"
-HAS_EXT = re.compile(
-    r"\.(py|sh|bash|yaml|yml|md|json|txt|toml|cfg|ini|env|"
+EXTS = (
+    r"py|sh|bash|yaml|yml|md|json|txt|toml|cfg|ini|env|"
     r"js|jsx|ts|tsx|go|java|rs|rb|php|cs|kt|swift|scala|"
-    r"tpl|conf|lock|xml|sql|proto|gradle|cmake)$"
+    r"tpl|conf|lock|xml|sql|proto|gradle|cmake"
+)
+HAS_EXT = re.compile(r"\.(" + EXTS + r")$")
+# 整段就是一个扩展名——用于分辨点号后面是扩展名还是属性名
+EXT_ONLY = re.compile(r"^(" + EXTS + r")$")
+
+# 工具配置与生成物：不算"文档该讲的仓库内容"（SKILL.md 有同名筛选表）。
+# 生成物尤其要剔除——按体积降序时它会排到最前，把真正的主体内容挤下去
+# （实测 coverage.json 19KB 压过了 tests/）。
+NOT_CONTENT = re.compile(
+    r"^(pytest|tox|setup|coverage|conftest)\."        # 测试/覆盖率 配置与产物
+    r"|^requirements-[\w.-]+\.txt$"                   # requirements-test.txt 等派生清单
+    r"|^\.(yamllint|gitleaks\.toml|gitleaksignore|coveragerc|flake8"
+    r"|editorconfig|pre-commit-config\.yaml|gitignore|gitattributes|dockerignore)$",
+    re.I,
 )
 
 # 外部域名（无 scheme 的 URL 写法）
@@ -57,8 +71,41 @@ SKILL_MENTION = re.compile(r"`/([a-z][a-z0-9-]{2,})`")
 # 字符串里的 "/" 与 Windows 的 "\\" 不匹配，会让整个 exists() 静默失效。
 
 
+def read_gitignore(repo: Path):
+    """收集 .gitignore 的模式，供"运行时产物"判定使用。
+
+    文档里的 `logs/main.log`、`SchemaFiles/` 往往不存在——它们是运行时生成、
+    被 .gitignore 排除的产物，不是"文档声称存在却缺失"。以前这靠人工判断
+    （SKILL.md 的"待确认"档），这里直接机械化。
+    """
+    gi = repo / ".gitignore"
+    if not gi.is_file():
+        return ()
+    pats = []
+    for ln in gi.read_text(encoding="utf-8", errors="replace").splitlines():
+        ln = ln.strip()
+        if ln and not ln.startswith(("#", "!")):
+            pats.append(ln)
+    return tuple(pats)
+
+
+def _gitignored(cand: str, pats) -> bool:
+    """该路径是否被 .gitignore 排除。"""
+    first = cand.split("/")[0]
+    base = cand.rsplit("/", 1)[-1]
+    for raw in pats:
+        p = raw.lstrip("/").rstrip("/")
+        if not p:
+            continue
+        if p == first or p == cand:              # `logs/` 命中 `logs/main.log`
+            return True
+        if p.startswith("*.") and base.endswith(p[1:]):   # `*.log`
+            return True
+    return False
+
+
 def build_index(repo: Path):
-    """返回 (全部相对路径的元组集合, basename -> [路径元组])。"""
+    """返回 (全部相对路径元组, basename -> [路径元组], .gitignore 模式)。"""
     rels = set()
     by_base = {}
     for p in repo.rglob("*"):
@@ -70,15 +117,35 @@ def build_index(repo: Path):
             continue
         rels.add(rp)
         by_base.setdefault(rp[-1], []).append(rp)
-    return rels, by_base
+    # 仓库根自身：文档常拿 `<仓库名>/` 当目录树标题（forum-reply-robot/），
+    # 那是自指，不是悬空引用
+    rels.add((repo.name,))
+    return rels, by_base, read_gitignore(repo)
+
+
+def parent_in_repo(idx, tok: str) -> bool:
+    """该文件引用的父目录在仓库里存在吗。
+
+    用于把"跨仓库引用"降级：`ascend-ci-project/CLAUDE.md` 里的
+    父目录在本地根本不存在——那是文档在指另一个仓库，不是本仓文件丢了。
+    而 `members_change_attention.py` 是裸文件名，父目录就是仓库根，
+    真丢了就是真丢了。
+    """
+    rels, by_base, _ = idx
+    head = tok.strip("./").split("/")[0]
+    if head == tok:            # 裸文件名，父目录即仓库根
+        return True
+    return head in by_base
 
 
 def exists(idx, tok: str) -> bool:
     """该 token 在仓库中是否存在（容忍文档省略中间层级）。"""
-    rels, by_base = idx
+    rels, by_base, ignored = idx
     cand = tok.strip("./").rstrip("/")
     if not cand:
         return False
+    if _gitignored(cand, ignored):
+        return True          # 运行时产物，不算悬空引用
     parts = tuple(cand.split("/"))
     if parts in rels:
         return True
@@ -115,6 +182,14 @@ def is_dirish(tok: str) -> bool:
     # 首段含点 → k8s 注解键（scheduling.volcano.sh/queue-name），非仓库路径
     if "." in segs[0]:
         return False
+    for s in segs[1:]:
+        if "." in s:
+            # 后续段带点：版本号（manifests/arc-controller-0.13.0）是真实目录，
+            # 而 src/utils.load_config 是 Python 属性引用——看点号后面跟着
+            # 数字还是扩展名来区分。
+            tail = s.rsplit(".", 1)[1]
+            if not (tail.isdigit() or EXT_ONLY.match(tail)):
+                return False
     return True
 
 
@@ -288,22 +363,27 @@ def main():
     total_refs = 0
     for dpath, text in docs_in:
         files, dirs = extract_refs(text, dpath.name)
-        bad_files = sorted(t for t in files if not exists(idx, t))
+        missing = [t for t in files if not exists(idx, t)]
+        # 拆两档：父目录不存在的很可能是跨仓库引用（无从校验），
+        # 裸文件名或父目录存在的才是新人一踩就中的真悬空
+        bad_files = sorted(t for t in missing if parent_in_repo(idx, t))
+        ext_files = sorted(t for t in missing if not parent_in_repo(idx, t))
         bad_dirs = sorted(t for t in dirs if not exists(idx, t))
         total_bad += len(bad_files)
         total_refs += len(files)
         if multi:
             print(f"  ── {dpath.name} ──")
-        if bad_files:
-            for t in bad_files:
-                label = f"{dpath.name}:{line_of(text, t)}" if multi else f"第 {line_of(text, t):>3} 行"
-                print(f"    ✗ {label:<12} {t}")
-        elif not multi:
+        for t in bad_files:
+            label = f"{dpath.name}:{line_of(text, t)}" if multi else f"第 {line_of(text, t):>3} 行"
+            print(f"    ✗ {label:<12} {t}")
+        if not bad_files and not ext_files and not bad_dirs and not multi:
             print("  ✓ 无悬空的文件引用")
-        if bad_dirs:
-            for t in bad_dirs:
-                label = f"{dpath.name}:{line_of(text, t)}" if multi else f"第 {line_of(text, t):>3} 行"
-                print(f"    ? {label:<12} {t}  （目录，可能是运行时生成）")
+        for t in ext_files:
+            label = f"{dpath.name}:{line_of(text, t)}" if multi else f"第 {line_of(text, t):>3} 行"
+            print(f"    ? {label:<12} {t}  （父目录不存在，可能指其他仓库）")
+        for t in bad_dirs:
+            label = f"{dpath.name}:{line_of(text, t)}" if multi else f"第 {line_of(text, t):>3} 行"
+            print(f"    ? {label:<12} {t}  （目录，可能是运行时生成）")
         if multi:
             print()
 
@@ -336,6 +416,8 @@ def main():
     for p in sorted(repo.iterdir()):
         if p.name in IGNORE_ENTRIES or p.name in PORTAL_DOCS:
             continue
+        if NOT_CONTENT.match(p.name) or _gitignored(p.name, idx[2]):
+            continue          # 工具配置 / 生成物，本就不需要文档
         if mentioned(p.name, joined, p.is_dir()):
             continue
         if p.is_dir():
