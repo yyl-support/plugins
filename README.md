@@ -33,4 +33,25 @@
 }
 ```
 
-`version` 是更新开关——不 bump，用户就收不到更新。
+## 更新
+
+改完推 `main` 之后，**必须** bump `version`，而且**要 bump 两处**：
+
+- `.claude-plugin/marketplace.json` 里该插件条目的 `version`
+- `plugins/<插件名>/.claude-plugin/plugin.json` 里的 `version`
+
+### 两个坑
+
+1. **两处 `version` 必须一致。** `claude plugin tag` 会校验 `plugin.json`
+   与外层 marketplace 条目是否相符，不一致直接报错。
+2. **不 bump `version`，用户就收不到更新。** 推了 `main` 但没改 version，
+   同事那边 `/plugin update` 是空的——插件被钉在旧版本号上，内容更新推不下去。
+
+### 发布前自查
+
+```bash
+claude plugin validate ./plugins/<插件名>   # 插件清单
+claude plugin validate .                    # 市场清单
+```
+
+两条都过再推。
