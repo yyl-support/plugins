@@ -152,6 +152,10 @@ skill/触发/命令等语境词"的写法。若文档用裸词（如"用 arc-dep
 跨仓库引用、容器内绝对路径（`/work/...`）、占位符（`{cluster}/...`）、
 glob 模式、散文省略号（`.../pvc.yaml`）、k8s 注解键、IP/CIDR。
 
+**点开头的路径**（`.claude-plugin/plugin.json`、`.github/workflows/ci.yml`）
+曾因 `strip("./")` 按字符集剥离（而非前缀剥离）被吃掉前导点而**全量误报**，
+已于 v0.9.0 修复。若再遇到点开头路径被报悬空，先查 `norm()` 是否被改动。
+
 ## 当前范围
 
 - ✅ 仓库根目录**全部**门户文档——`CLAUDE.md`、`AGENTS.md`、`README.md` 有几份查几份

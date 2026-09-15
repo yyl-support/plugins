@@ -123,6 +123,20 @@ def build_index(repo: Path):
     return rels, by_base, read_gitignore(repo)
 
 
+def norm(tok: str) -> str:
+    """剥掉路径开头的相对前缀。
+
+    必须用 removeprefix 而不是 strip("./")——strip 按**字符集**剥离，
+    会把 `.claude-plugin/...` 的前导点一并吃掉变成 `claude-plugin/...`，
+    导致文档里所有点开头的路径（`.github/workflows/ci.yml`、
+    `.claude/settings.json`）全部误报为悬空引用。
+    """
+    for pre in ("./", "/"):
+        while tok.startswith(pre):
+            tok = tok[len(pre):]
+    return tok
+
+
 def parent_in_repo(idx, tok: str) -> bool:
     """该文件引用的父目录在仓库里存在吗。
 
@@ -132,8 +146,9 @@ def parent_in_repo(idx, tok: str) -> bool:
     真丢了就是真丢了。
     """
     rels, by_base, _ = idx
-    head = tok.strip("./").split("/")[0]
-    if head == tok:            # 裸文件名，父目录即仓库根
+    stripped = norm(tok)
+    head = stripped.split("/")[0]
+    if head == stripped:       # 裸文件名，父目录即仓库根
         return True
     return head in by_base
 
@@ -141,7 +156,7 @@ def parent_in_repo(idx, tok: str) -> bool:
 def exists(idx, tok: str) -> bool:
     """该 token 在仓库中是否存在（容忍文档省略中间层级）。"""
     rels, by_base, ignored = idx
-    cand = tok.strip("./").rstrip("/")
+    cand = norm(tok).rstrip("/")
     if not cand:
         return False
     if _gitignored(cand, ignored):
