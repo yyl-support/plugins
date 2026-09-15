@@ -11,13 +11,62 @@
 /plugin install knowledge-plugin@yyl-support-plugins
 ```
 
-装好后用 `/knowledge-plugin:portal` 和 `/knowledge-plugin:doc-reconcile` 调用。
+装好后不用记命令——直接描述你的问题，agent 会自己挑合适的 skill。
 
 ## 插件列表
 
 | 插件 | 作用 |
 |---|---|
 | [`knowledge-plugin`](./plugins/knowledge-plugin) | 团队代码知识门户 + 门户文档可信度对账 |
+
+## knowledge-plugin 用它来干什么
+
+| 你想问 | agent 会调用 |
+|---|---|
+| 这个项目是干嘛的 / 怎么上手 / 怎么参与 | `portal` |
+| 这份文档准不准 / 新人能不能照着做 / 是不是过期了 | `doc-reconcile` |
+| 这个函数被谁调用 / 改了会影响什么 | codegraph MCP |
+| GitCode 上那个 issue / PR 是什么情况 | gitcode MCP |
+
+**测试环境 / 部署上线不在范围内**——那部分由独立模块承载，被问到时会如实说答不了。
+
+## 两个 MCP 的故障排查
+
+两个 MCP 的失败方式**完全不同**，遇到问题先看这里：
+
+### gitcode：需要 `GITCODE_TOKEN` 环境变量
+
+**症状**：工具**根本不在**工具列表里（注意：不是调用失败，是压根没有）。
+
+**原因**：该 server 在**启动时**校验 token，token 无效则整个 server 不启动。
+
+**处理**：设置环境变量后**重启会话**：
+
+```bash
+export GITCODE_TOKEN=<你自己的 token>
+```
+
+token 向团队申请，**不要提交到任何仓库**。
+
+### codegraph：需要先建索引
+
+**症状**：工具能调用，但返回 "isn't indexed with codegraph"。
+
+**原因**：该仓库没有 `.codegraph/` 目录。
+
+**处理**：在项目里跑 `codegraph init`。建索引耗时且占磁盘，所以由**你**决定，
+agent 不会自动跑。
+
+### 排查工具是否存在时，用全名
+
+MCP 工具名带命名空间，例如：
+
+```
+mcp__plugin_knowledge-plugin_codegraph__codegraph_explore
+```
+
+用短名 `codegraph_explore` 去问会得到"不存在"的答复——那是名字不对，
+不是工具没装上。
 
 ## 新增插件
 
