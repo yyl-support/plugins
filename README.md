@@ -27,6 +27,7 @@
 | 团队一共有哪些仓库 / 我该看哪个仓 | `portal`（内含 gitcode 脚本） |
 | 这份文档准不准 / 新人能不能照着做 / 是不是过期了 | `doc-reconcile` |
 | 这个函数被谁调用 / 改了会影响什么 | codegraph MCP |
+| 给这几个仓建索引 / codegraph 用不了 | `codegraph-setup` |
 | GitCode 上那个 issue / PR 是什么情况 | gitcode MCP |
 
 **测试环境 / 部署上线不在范围内**——那部分由独立模块承载，被问到时会如实说答不了。
@@ -59,8 +60,22 @@ token 有权看到的仓库**——实测同一组织匿名请求返回 1 个、
 
 **原因**：该仓库没有 `.codegraph/` 目录。
 
-**处理**：在项目里跑 `codegraph init`。建索引耗时且占磁盘，所以由**你**决定，
-agent 不会自动跑。
+**处理**：建索引。建索引耗时且占磁盘，所以由**你**决定，agent 不会自动跑：
+
+```bash
+# 走插件自带的批量脚本（推荐，顺带处理下面的坑）
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/codegraph-setup/scripts/warmup.py" <仓库路径>...
+```
+
+#### 顺带一个坑：`.codegraph/` 不会被 gitignore
+
+`codegraph init` **不写** `.gitignore`。实测 `init --yes` 跑完，`git status`
+里是裸的 `?? .codegraph/`——一次 `git add -A` 就把 7MB 的 SQLite 提交进去了。
+
+脚本的处理是写进 `.git/info/exclude`，**不动仓库里受版本控制的 `.gitignore`**。
+
+注意 `info/exclude` **每个 clone 各自一份**，不随仓库分发——同事 clone
+下来不会有这条规则，**换台机器要重跑脚本**。
 
 ### 排查工具是否存在时，用全名
 

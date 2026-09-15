@@ -1,7 +1,7 @@
 {
   "name": "knowledge-plugin",
   "displayName": "团队代码知识插件",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "帮助新人快速上手团队项目的知识门户插件：优先复用仓库已有的门户文档（CLAUDE.md / AGENTS.md / README.md / .claude/skills），并对这些文档做可信度对账，检出悬空引用与覆盖缺口。",
   "keywords": [
     "onboarding",
