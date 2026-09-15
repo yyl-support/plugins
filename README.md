@@ -24,6 +24,7 @@
 | 你想问 | agent 会调用 |
 |---|---|
 | 这个项目是干嘛的 / 怎么上手 / 怎么参与 | `portal` |
+| 团队一共有哪些仓库 / 我该看哪个仓 | `portal`（内含 gitcode 脚本） |
 | 这份文档准不准 / 新人能不能照着做 / 是不是过期了 | `doc-reconcile` |
 | 这个函数被谁调用 / 改了会影响什么 | codegraph MCP |
 | GitCode 上那个 issue / PR 是什么情况 | gitcode MCP |
@@ -47,6 +48,10 @@ export GITCODE_TOKEN=<你自己的 token>
 ```
 
 token 向团队申请，**不要提交到任何仓库**。
+
+同一个 token 也用于 `portal` 里的"团队有哪些仓库"脚本。该接口**只返回
+token 有权看到的仓库**——实测同一组织匿名请求返回 1 个、带 token 返回 8 个
+（7 个私有），**不报错，只是少给**。所以列表为空不代表组织下没有仓库。
 
 ### codegraph：需要先建索引
 

@@ -1,6 +1,6 @@
 ---
 name: portal
-description: 团队项目的知识门户——按优先级读取仓库已有的门户文档（.claude/skills、CLAUDE.md/AGENTS.md、README.md），回答关于这个项目"是什么、怎么组织、怎么参与"的问题，并给出信息来源。当用户问"这个项目是干嘛的""我该怎么上手""团队的工作流程是什么""XX 仓库怎么配置/提交/部署"，或需要了解团队项目全貌时使用。Use when answering questions about a team repository's purpose, structure, conventions, or contribution workflow, or when onboarding onto an unfamiliar team project.
+description: 团队项目的知识门户——按优先级读取仓库已有的门户文档（.claude/skills、CLAUDE.md/AGENTS.md、README.md），回答关于这个项目"是什么、怎么组织、怎么参与"的问题，并给出信息来源。当用户问"这个项目是干嘛的""我该怎么上手""团队的工作流程是什么""XX 仓库怎么配置/提交/部署"，或需要了解团队项目全貌时使用——包括"团队都有哪些仓库/项目""我该看哪个仓"这类跨仓库的入门问题。Use when answering questions about a team repository's purpose, structure, conventions, or contribution workflow; when onboarding onto an unfamiliar team project; or when the user asks which repositories the team has (e.g. on GitCode).
 ---
 
 # 团队项目知识门户
@@ -100,6 +100,33 @@ skill 里通常有现成的、团队验证过的步骤，**直接复用，不要
 两者分工：`portal` 是**语义对账**（读文档 + 读代码，发现"说得对不对"），
 `doc-reconcile` 是**机械对账**（只比对路径，发现"对不对得上"）。
 覆盖的失效类型几乎不重叠，**发现一处矛盾时值得把另一样也跑一遍**。
+
+## 团队在 GitCode 上有哪些仓库
+
+上面几步都是**在当前仓库内部**找知识。但有一类问题靠读当前目录答不了：
+用户想知道**团队一共有哪些仓库**（典型场景：刚入职，手上只有一两个仓，
+需要知道全貌才能判断"我该看哪个"）。
+
+这类问题走脚本，**不要靠猜或凭印象列**：
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/portal/scripts/gitcode_repos.py" pipelineascode
+```
+
+需要 `GITCODE_TOKEN` 环境变量（向团队申请）。输出按最后推送时间降序——
+哪个仓还在动，一眼能看出来。
+
+**为什么不用 gitcode MCP**：MCP 注册的工具全是仓库内部维度的
+（issue / PR / 看板 / 里程碑），**没有"按组织枚举仓库"的接口**。
+这正是脚本存在的唯一理由。
+
+### 报告时要说清楚的一点
+
+这个接口**只返回 token 有权看到的仓库**。实测同一组织：
+匿名请求返回 1 个，带 token 返回 8 个（7 个私有）——**不报错，只是少给**。
+
+所以列完要补一句边界：**"看不到"不等于"不存在"**。
+用户如果发现少了某个他确信存在的仓，那是权限问题，不是没有这个仓。
 
 ## 不要做的事
 
